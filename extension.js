@@ -11,6 +11,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import { readOAuthToken } from './credentials.js';
+
 const DEFAULT_UPDATE_INTERVAL = 10; // 10 minutes (stored as minutes in settings)
 const COUNTDOWN_INTERVAL = 1; // 1 second
 const SESSION_STATE_PATH = GLib.build_filenamev([GLib.get_home_dir(), '.claude', 'session-state.json']);
@@ -535,21 +537,20 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
             return;
         }
 
-        const sessionKey = this._settings.get_string('session-key');
-        const orgId = this._settings.get_string('organization-id');
+        const token = readOAuthToken();
 
-        if (!sessionKey || !orgId) {
+        if (!token) {
             this._sessionLabel.set_text('S: N/A');
             this._weeklyLabel.set_text('W: N/A');
             this._timeLabel.set_text('Login');
             return;
         }
 
-        const url = `https://claude.ai/api/organizations/${orgId}/usage`;
+        const url = 'https://api.anthropic.com/api/oauth/usage';
         const message = Soup.Message.new('GET', url);
 
-        message.request_headers.append('Cookie', `sessionKey=${sessionKey}`);
-        message.request_headers.append('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) GNOME Shell Extension');
+        message.request_headers.append('Authorization', `Bearer ${token}`);
+        message.request_headers.append('anthropic-beta', 'oauth-2025-04-20');
 
         this._session.send_and_read_async(
             message,
@@ -560,7 +561,9 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
                     const bytes = session.send_and_read_finish(result);
 
                     if (message.status_code !== 200) {
-                        const errorMsg = `HTTP ${message.status_code}`;
+                        const errorMsg = message.status_code === 401
+                            ? 'Token expired — run `claude auth login`'
+                            : `HTTP ${message.status_code}`;
                         console.error(`Claude Usage: ${errorMsg}`);
                         this._setError(errorMsg);
                         return;
