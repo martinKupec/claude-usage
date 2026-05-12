@@ -5,8 +5,10 @@ A GNOME Shell extension that displays Claude AI usage statistics and Claude Code
 ## Features
 
 ### API Usage Monitoring
+- **Automatic authentication**: Credentials read from `~/.claude/.credentials.json` — no manual setup
 - **Session usage**: 5-hour rolling window utilization percentage
 - **Weekly usage**: 7-day rolling window utilization percentage
+- **Model breakdowns**: Per-model usage (Sonnet, Opus, Claude Cowork, Claude Design, etc.) shown when active
 - **Time remaining**: Countdown until usage resets
 - **Color-coded warnings**: Yellow at 75%, red at 90%
 - **Configurable refresh interval**: Set how often to poll the API (1-60 minutes)
@@ -69,24 +71,16 @@ Enable the extension:
 gnome-extensions enable claude-usage@local
 ```
 
-### 2. Configure API Credentials (for usage stats)
+### 2. Authenticate Claude Code (for usage stats)
 
-Open the extension preferences:
+Usage stats are fetched using the OAuth token that Claude Code CLI writes to `~/.claude/.credentials.json`. If you've already used Claude Code, you're done — no extra configuration needed.
+
+If you haven't authenticated yet:
 ```bash
-gnome-extensions prefs claude-usage@local
+claude auth login
 ```
 
-You'll need to enter:
-- **Session Key**: The `sessionKey` cookie from claude.ai
-- **Organization ID**: Your organization UUID
-
-To find these:
-1. Log into [claude.ai](https://claude.ai) in your browser
-2. Open Developer Tools (F12)
-3. Go to **Application > Cookies > claude.ai**
-4. Copy the `sessionKey` value
-5. Go to **Network** tab, find any request to `claude.ai/api`
-6. The organization ID is in the URL (e.g., `/api/organizations/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/...`)
+You can check whether credentials are detected under **Settings → Authentication** in the extension preferences.
 
 ### 3. Set Up Claude Code Hooks (for session tracking)
 
@@ -187,7 +181,7 @@ A complete hooks configuration is also available in `hooks-config.json` for refe
 ## How It Works
 
 ### API Usage Stats
-The extension polls the Claude API every 10 minutes to fetch usage statistics. The countdown timers update every second.
+The extension reads the OAuth token from `~/.claude/.credentials.json` and polls `api.anthropic.com/api/oauth/usage` every 10 minutes. The countdown timers update every second. All non-null usage buckets (per-model, per-product) are shown in the dropdown menu.
 
 ### Claude Code Session Tracking
 The hook script intercepts Claude Code events and writes session state to `~/.claude/session-state.json`. The extension monitors this file for changes and updates the display in real-time.
@@ -218,6 +212,7 @@ This means Claude has no idea these hooks exist - your model quality is unaffect
 ```
 claude-usage/
 ├── extension.js          # Main GNOME extension code
+├── credentials.js        # Shared OAuth token reader (~/.claude/.credentials.json)
 ├── prefs.js              # Extension preferences UI
 ├── metadata.json         # Extension metadata
 ├── stylesheet.css        # Extension styles
@@ -241,9 +236,9 @@ journalctl -f -o cat /usr/bin/gnome-shell
 ```
 
 ### API usage shows "N/A" or "ERR"
-- Verify your session key and organization ID are correct
-- Session keys expire - you may need to refresh from browser cookies
-- Check the GNOME Shell log for HTTP errors
+- Run `claude auth login` if you haven't authenticated Claude Code yet
+- If you see "Token expired", run `claude auth login` to refresh your credentials
+- Check the GNOME Shell log for HTTP errors: `journalctl -f -o cat /usr/bin/gnome-shell`
 
 ### Claude Code status not updating
 - Ensure the hook script is executable: `chmod +x claude-session-hook.py`
